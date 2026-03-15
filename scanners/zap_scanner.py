@@ -10,10 +10,12 @@ def scan(target):
         'https': 'http://127.0.0.1:8090'
     })
 
+    # Spider
     spider_id = zap.spider.scan(target)
     while zap.spider.status(spider_id) != '100':
         time.sleep(2)
 
+    # Active scan
     ascan_id = zap.ascan.scan(target)
     while zap.ascan.status(ascan_id) != '100':
         time.sleep(5)
@@ -21,11 +23,13 @@ def scan(target):
     alerts = zap.core.alerts(baseurl=target)
 
     if not alerts:
-        return "Уязвимости не обнаружены"
+        return "Уязвимости не обнаружены", []
 
-    result = []
+    result_text = []
+    vulnerabilities = []
+
     for a in alerts:
-        result.append(
+        result_text.append(
             f"[{a['risk']}] {a['alert']}\n"
             f"URL: {a['url']}\n"
             f"Описание: {a['description']}\n"
@@ -33,4 +37,15 @@ def scan(target):
             "-------------------------"
         )
 
-    return "\n".join(result)
+        vulnerabilities.append({
+            "url": a['url'],
+            "alert": a['alert'],
+            "risk": a['risk'],
+            "description": a['description'],
+            "solution": a['solution'],
+            "parameter": a.get("param", ""),
+            "attack": a.get("attack", ""),
+            "evidence": a.get("evidence", "")
+        })
+
+    return "\n".join(result_text), vulnerabilities

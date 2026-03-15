@@ -1,40 +1,14 @@
-import os
 from utils.runner import run_command
+import os
 
-NIKTO_PATH = "D:/Nikto/nikto-master/nikto-master/program/nikto.pl"
+NIKTO_PATH = r"D:/Nikto/nikto-master/nikto-master/program/nikto.pl"
+NIKTO_DIR = os.path.dirname(NIKTO_PATH)
 
 
-def scan(target: str, args: list[str]) -> str:
-    """
-    Запуск сканирования Nikto
+def scan(target, args=None):
 
-    :param target: URL или IP (обязательно с http/https)
-    :param args: список аргументов Nikto (например ["-Tuning x", "-ssl"])
-    :return: текст результата сканирования
-    """
+    args = args or []
 
-    if not os.path.exists(NIKTO_PATH):
-        return (
-            "Ошибка: файл nikto.pl не найден.\n"
-            f"Ожидаемый путь:\n{NIKTO_PATH}"
-        )
+    command = ["perl", NIKTO_PATH, "-h", target] + args
 
-    if not target.startswith(("http://", "https://")):
-        return "Ошибка: укажите URL с http:// или https://"
-
-    command = ["perl", NIKTO_PATH, "-h", target]
-
-    for arg in args:
-        if isinstance(arg, str):
-            command.extend(arg.split())
-
-    try:
-        output = run_command(command)
-
-        if not output.strip():
-            return "Сканирование завершено, но Nikto не вернул результатов."
-
-        return output
-
-    except Exception as e:
-        return f"Ошибка при запуске Nikto: {str(e)}"
+    return run_command(command, cwd=NIKTO_DIR)
