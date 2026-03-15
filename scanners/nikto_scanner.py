@@ -1,6 +1,8 @@
 from utils.runner import run_command
 import os
 
+#TODO
+
 NIKTO_PATH = r"D:/Nikto/nikto-master/nikto-master/program/nikto.pl"
 NIKTO_DIR = os.path.dirname(NIKTO_PATH)
 

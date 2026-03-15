@@ -12,7 +12,5 @@ SCANNER_ARGS = {
 "-Tuning x": "XSS tests"
 },
 
-"zap": {
-}
-
+"zap": {}
 }
