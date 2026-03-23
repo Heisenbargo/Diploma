@@ -76,28 +76,29 @@ def init_db():
     )
     """)
 
-    # Nikto
+    # Wapiti
 
     c.execute("""
-    CREATE TABLE IF NOT EXISTS web_issues (
+    CREATE TABLE IF NOT EXISTS wapiti_issues (
 
         id INTEGER PRIMARY KEY AUTOINCREMENT,
 
         target_id INTEGER,
 
-        port INTEGER,
+        type TEXT,
         url TEXT,
+        parameter TEXT,
+        method TEXT,
 
-        issue TEXT,
-        description TEXT,
+        info TEXT,
+        level TEXT,
         reference TEXT,
-        severity TEXT,
 
         last_updated DATETIME,
 
         FOREIGN KEY(target_id) REFERENCES targets(id),
 
-        UNIQUE(target_id, url, issue)
+        UNIQUE(target_id, url, parameter, type)
     )
     """)
 
@@ -283,10 +284,10 @@ def save_services(target_id, services):
 
 
 # --------------------------------------------------
-# Nikto
+# Wapiti
 # --------------------------------------------------
 
-def save_web_issues(target_id, issues):
+def save_wapiti_issues(target_id, issues):
 
     conn = get_conn()
     c = conn.cursor()
@@ -294,30 +295,29 @@ def save_web_issues(target_id, issues):
     for i in issues:
 
         c.execute("""
+        INSERT INTO wapiti_issues
+        (target_id, type, url, parameter, method, info, level, reference, last_updated)
 
-        INSERT INTO web_issues
-        (target_id,port,url,issue,description,reference,severity,last_updated)
+        VALUES(?,?,?,?,?,?,?, ?, datetime('now'))
 
-        VALUES(?,?,?,?,?,?,?,datetime('now'))
-
-        ON CONFLICT(target_id,url,issue)
+        ON CONFLICT(target_id, url, parameter, type)
 
         DO UPDATE SET
-
-            description=excluded.description,
+            method=excluded.method,
+            info=excluded.info,
+            level=excluded.level,
             reference=excluded.reference,
-            severity=excluded.severity,
             last_updated=datetime('now')
-
         """, (
 
             target_id,
-            i.get("port"),
+            i.get("type"),
             i.get("url"),
-            i.get("issue"),
-            i.get("description"),
-            i.get("reference"),
-            i.get("severity")
+            i.get("parameter"),
+            i.get("method"),
+            i.get("info"),
+            i.get("level"),
+            i.get("reference")
 
         ))
 

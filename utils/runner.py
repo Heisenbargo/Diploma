@@ -1,12 +1,16 @@
 import subprocess
 
-def run_command(command, cwd=None):
+def run_command(command):
 
     result = subprocess.run(
         command,
         capture_output=True,
-        text=True,
-        cwd=cwd
+        text=True
     )
 
-    return result.stdout + result.stderr
+    # если есть нормальный stdout → показываем его
+    if result.stdout.strip():
+        return result.stdout
+
+    # иначе показываем stderr (но аккуратно)
+    return "Ошибка выполнения сканера"

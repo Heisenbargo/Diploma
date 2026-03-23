@@ -1,16 +1,18 @@
-SCANNER_ARGS = {
+SCANNER_ARGUMENTS = {
 
-"nmap": {
-"-sS": "TCP SYN scan",
-"-sV": "Service detection",
-"-O": "OS detection"
-},
+    "nmap": {
+        "-sS": "TCP SYN scan",
+        "-sV": "Service detection",
+        "-O": "OS detection"
+    },
 
-"nikto": {
-"":"Сканирование без аргументов",    
-"-Display V": "Verbose",
-"-Tuning x": "XSS tests"
-},
+    "wapiti": {
+        "-v 2": "Подробный вывод",
+        "--flush-session": "Игнорировать предыдущие сессии",
+        "--scope domain": "Сканировать только домен",
+        "--timeout 10": "Таймаут запросов",
+        "--max-links-per-page 10": "Ограничение ссылок",
+    },
 
-"zap": {}
+    "zap": {}
 }
