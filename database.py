@@ -282,6 +282,30 @@ def save_services(target_id, services):
     conn.commit()
     conn.close()
 
+def get_services(target_id):
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT port, state, service, version
+        FROM services
+        WHERE target_id=?
+    """, (target_id,))
+
+    rows = c.fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "port": r[0],
+            "state": r[1],
+            "service": r[2],
+            "version": r[3]
+        }
+        for r in rows
+    ]
 
 # --------------------------------------------------
 # Wapiti
@@ -324,6 +348,20 @@ def save_wapiti_issues(target_id, issues):
     conn.commit()
     conn.close()
 
+def get_wapiti_issues(target_id):
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("SELECT url,type,info,level FROM wapiti_issues WHERE target_id=?", (target_id,))
+    rows = c.fetchall()
+
+    conn.close()
+
+    return [
+        {"url": r[0], "type": r[1], "info": r[2], "level": r[3]}
+        for r in rows
+    ]
 
 # --------------------------------------------------
 # ZAP
@@ -372,3 +410,28 @@ def save_vulnerabilities(target_id, vulns):
 
     conn.commit()
     conn.close()
+
+def get_vulnerabilities(target_id):
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT url, alert, description, risk
+        FROM vulnerabilities
+        WHERE target_id=?
+    """, (target_id,))
+
+    rows = c.fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "url": r[0],
+            "alert": r[1],
+            "description": r[2],
+            "risk": r[3]
+        }
+        for r in rows
+    ]

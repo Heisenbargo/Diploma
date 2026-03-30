@@ -7,47 +7,82 @@ from database import *
 from config.scanner_args import SCANNER_ARGUMENTS
 
 from scanners.zap_scanner import scan as zap_scan
-
-from parsers.nmap_parser import parse as nmap_parse
-
 from scanners.wapiti_scanner import scan as wapiti_scan
 from parsers.wapiti_parser import parse as wapiti_parse
-
 
 init_db()
 
 SCANNERS = ["nmap", "zap", "wapiti"]
 
 
+# ---------------- RUN COMMAND ----------------
+
 def run_command(command):
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True
+    )
     return result.stdout + result.stderr
 
 
-# ================= FORMATTERS =================
+# ---------------- NMAP PARSER ----------------
 
-def format_wapiti(issues):
+def parse_nmap(output):
 
-    if not issues:
-        return "Уязвимости не обнаружены"
+    services = []
 
-    result = []
+    for line in output.splitlines():
 
-    for i in issues:
-        result.append(
-            f"[{i.get('level')}] {i.get('type')}\n"
-            f"URL: {i.get('url')}\n"
-            f"Параметр: {i.get('parameter')}\n"
-            f"Метод: {i.get('method')}\n"
-            f"Описание: {i.get('info')}\n"
-            f"Рекомендация: {i.get('reference')}\n"
-            "-------------------------"
-        )
+        if "/tcp" in line and "open" in line:
 
-    return "\n".join(result)
+            parts = line.split()
+
+            try:
+                services.append({
+                    "port": int(parts[0].split("/")[0]),
+                    "protocol": "tcp",
+                    "state": parts[1],
+                    "service": parts[2],
+                    "product": "",
+                    "version": "",
+                    "extra_info": ""
+                })
+            except:
+                pass
+
+    return services
+
+# ---------------- ARGUMENT LOGIC ----------------
+
+def on_scanner_change(event=None):
+
+    scanner = scanner_var.get()
+
+    # ZAP — без аргументов
+    if scanner == "zap":
+        arg_box["values"] = []
+        arg_var.set("")
+        arg_box.configure(state="disabled")
+        return
+
+    # Получаем аргументы
+    args = list(SCANNER_ARGUMENTS.get(scanner, {}).keys())
+
+    arg_box.configure(state="normal")
+    arg_box["values"] = args
+
+    if args:
+        arg_var.set(args[0])
+    else:
+        arg_var.set("")
 
 
-# ================= MAIN LOGIC =================
+def on_argument_change(event=None):
+    # можно позже добавить описание аргумента
+    pass
+
+# ---------------- RUN SCAN ----------------
 
 def run_scan():
 
@@ -58,8 +93,9 @@ def run_scan():
     if not target:
         return
 
-    output_text.delete(1.0, tk.END)
-    output_text.insert(tk.END, "Сканирование запущено...\n")
+    raw_text.delete(1.0, tk.END)
+    raw_text.insert(tk.END, "Сканирование запущено...\n")
+
     root.update()
 
     target_id = get_or_create_target(target)
@@ -70,126 +106,235 @@ def run_scan():
 
     scan_id = create_scan(target_id, scanner, scan_args)
 
-    output = ""
+    raw_output = ""
 
     try:
 
-        # ========= NMAP =========
+        # ---------- NMAP ----------
         if scanner == "nmap":
 
-            command = ["nmap"] + scan_args + [target]
-            raw = run_command(command)
+            command = ["nmap"]
 
-            services = nmap_parse(raw)
+            if arg:
+                command.append(arg)
+
+            command.append(target)
+
+            raw_output = run_command(command)
+
+            services = parse_nmap(raw_output)
+
             save_services(target_id, services)
 
-            output = raw
-
-        # ========= ZAP =========
+        # ---------- ZAP ----------
         elif scanner == "zap":
 
-            output, vulns = zap_scan(target)
+            raw_output, vulns = zap_scan(target)
+
             save_vulnerabilities(target_id, vulns)
 
-        # ========= WAPITI =========
+        # ---------- WAPITI ----------
         elif scanner == "wapiti":
 
-            raw, report_file = wapiti_scan(target, scan_args)
+            raw_output, report_file = wapiti_scan(target, scan_args)
 
-            import time
-            time.sleep(2)  # дождаться записи файла
+            time.sleep(2)
 
             issues = wapiti_parse(report_file)
 
             save_wapiti_issues(target_id, issues)
 
-            if not issues:
-                output = "Уязвимости не обнаружены"
-            else:
-                output = ""
+        finish_scan(scan_id, raw_output)
 
-                for i in issues:
-                    output += (
-                        f"[{i.get('level')}] {i.get('type')}\n"
-                        f"URL: {i.get('url')}\n"
-                        f"Параметр: {i.get('parameter')}\n"
-                        f"Метод: {i.get('method')}\n"
-                        f"Описание: {i.get('info')}\n"
-                        f"Решение: {i.get('reference')}\n"
-                        "-------------------------\n"
-                    )
+    except Exception:
+        raw_output = "Ошибка при сканировании"
 
-        finish_scan(scan_id, output)
-
-    except Exception as e:
-        output = f"Ошибка:\n{e}"
-
-    output_text.delete(1.0, tk.END)
-    output_text.insert(tk.END, output)
+    raw_text.delete(1.0, tk.END)
+    raw_text.insert(tk.END, raw_output)
 
 
-def on_scanner_change(event=None):
+# ---------------- REPORT ----------------
 
-    scanner = scanner_var.get()
+def generate_report():
 
-    if scanner == "zap":
-        arg_combo["values"] = []
-        arg_var.set("")
-        arg_desc_var.set("Для ZAP аргументы не требуются")
+    target = target_entry.get().strip()
+    if not target:
         return
 
-    args = list(SCANNER_ARGUMENTS.get(scanner, {}).keys())
-    arg_combo["values"] = args
+    target_id = get_or_create_target(target)
 
-    if args:
-        arg_combo.current(0)
-        on_argument_change()
+    nmap_text.delete(1.0, tk.END)
+    zap_text.delete(1.0, tk.END)
+    wapiti_text.delete(1.0, tk.END)
+
+    # ---- NMAP ----
+    for s in get_services(target_id):
+        nmap_text.insert(tk.END,
+            f"Порт: {s['port']}\n"
+            f"Состояние: {translate_state(s['state'])}\n"
+            f"Служба: {s['service']}\n"
+            f"Версия: {translate_text(s['version'])}\n"
+            "----------------------\n"
+        )
+
+    # ---- ZAP ----
+    for v in get_vulnerabilities(target_id):
+        zap_text.insert(tk.END,
+            f"[{translate_risk(v['risk'])}] {v['alert']}\n"
+            f"URL: {v['url']}\n"
+            f"Описание: {translate_text(v['description'])}\n"
+            "----------------------\n"
+        )
+
+    # ---- WAPITI ----
+    for i in get_wapiti_issues(target_id):
+        wapiti_text.insert(tk.END,
+            f"[{translate_risk(i['level'])}] {i['type']}\n"
+            f"URL: {i['url']}\n"
+            f"Описание: {translate_text(i['info'])}\n"
+            "----------------------\n"
+        )
 
 
-def on_argument_change(event=None):
+# ---------------- TRANSLATION ----------------
 
-    scanner = scanner_var.get()
-    arg = arg_var.get()
+def translate_risk(r):
+    return {
+        "Low": "Низкий",
+        "Medium": "Средний",
+        "High": "Высокий",
+        "Informational": "Информационный"
+    }.get(r, r)
 
-    if arg in SCANNER_ARGUMENTS.get(scanner, {}):
-        arg_desc_var.set(SCANNER_ARGUMENTS[scanner][arg])
+
+def translate_state(s):
+    return {
+        "open": "Открыт",
+        "closed": "Закрыт",
+        "filtered": "Фильтруется"
+    }.get(s, s)
 
 
-# ================= GUI =================
+def translate_text(text):
+    if not text:
+        return ""
+
+    words = {
+        "server": "сервер",
+        "version": "версия",
+        "detected": "обнаружено",
+        "vulnerability": "уязвимость",
+    }
+
+    for k, v in words.items():
+        text = text.replace(k, v)
+
+    return text
+
+
+# ---------------- GUI ----------------
 
 root = tk.Tk()
-root.title("Сканер уязвимостей")
-root.geometry("1000x600")
+root.geometry("1100x650")
+root.configure(bg="#0f172a")
 
-main_frame = ttk.Frame(root, padding=10)
+style = ttk.Style()
+style.theme_use("clam")
+
+# Custom styles
+style.configure("TFrame", background="#0f172a")
+style.configure("Card.TFrame", background="#1e293b", relief="flat")
+style.configure("TLabel", background="#0f172a", foreground="#e2e8f0", font=("Segoe UI", 10))
+style.configure("Header.TLabel", font=("Segoe UI", 16, "bold"), foreground="#f8fafc")
+style.configure("TButton", font=("Segoe UI", 10), padding=6)
+style.configure("Accent.TButton", background="#3b82f6", foreground="white")
+style.map("Accent.TButton", background=[("active", "#2563eb")])
+
+# --- MAIN LAYOUT ---
+main_frame = ttk.Frame(root, padding=15)
 main_frame.pack(fill="both", expand=True)
 
-left = ttk.Frame(main_frame, width=300)
-left.pack(side="left", fill="y")
+# LEFT PANEL (CONTROL)
+left_frame = ttk.Frame(main_frame, style="Card.TFrame", padding=15)
+left_frame.pack(side="left", fill="y", padx=(0, 10))
 
-right = ttk.Frame(main_frame)
-right.pack(side="right", fill="both", expand=True)
+# RIGHT PANEL (OUTPUT)
+right_frame = ttk.Frame(main_frame, style="Card.TFrame", padding=10)
+right_frame.pack(side="right", fill="both", expand=True)
+
+# --- LEFT CONTENT ---
+ttk.Label(left_frame, text="Scanner Control", style="Header.TLabel").pack(anchor="w", pady=(0, 15))
 
 scanner_var = tk.StringVar(value="nmap")
-scanner_combo = ttk.Combobox(left, textvariable=scanner_var, values=SCANNERS, state="readonly")
-scanner_combo.pack(fill="x")
-scanner_combo.bind("<<ComboboxSelected>>", on_scanner_change)
-
 arg_var = tk.StringVar()
-arg_combo = ttk.Combobox(left, textvariable=arg_var)
-arg_combo.pack(fill="x")
-arg_combo.bind("<<ComboboxSelected>>", on_argument_change)
 
-arg_desc_var = tk.StringVar()
-ttk.Label(left, textvariable=arg_desc_var, wraplength=250).pack()
+# Scanner select
+ttk.Label(left_frame, text="Scanner").pack(anchor="w")
+scanner_box = ttk.Combobox(
+    left_frame,
+    textvariable=scanner_var,
+    values=SCANNERS,
+    state="readonly"
+)
+scanner_box.pack(fill="x", pady=5)
+scanner_box.bind("<<ComboboxSelected>>", on_scanner_change)
+scanner_box.pack(fill="x", pady=5)
 
-target_entry = ttk.Entry(left)
-target_entry.pack(fill="x")
+# Arguments
+ttk.Label(left_frame, text="Arguments").pack(anchor="w", pady=(10, 0))
+arg_box = ttk.Combobox(
+    left_frame,
+    textvariable=arg_var
+)
+arg_box.pack(fill="x", pady=5)
+arg_box.bind("<<ComboboxSelected>>", on_argument_change)
 
-ttk.Button(left, text="Сканировать", command=run_scan).pack()
+# Target
+ttk.Label(left_frame, text="Target").pack(anchor="w", pady=(10, 0))
+target_entry = ttk.Entry(left_frame)
+target_entry.pack(fill="x", pady=5)
 
-output_text = tk.Text(right)
-output_text.pack(fill="both", expand=True)
+# Buttons
+ttk.Button(left_frame, text="Run Scan", style="Accent.TButton", command=run_scan).pack(fill="x", pady=(15, 5))
+ttk.Button(left_frame, text="Generate Report", command=generate_report).pack(fill="x")
+
+# --- RIGHT CONTENT ---
+notebook = ttk.Notebook(right_frame)
+notebook.pack(fill="both", expand=True)
+
+# RAW TAB
+raw_frame = ttk.Frame(notebook)
+notebook.add(raw_frame, text="Raw Output")
+
+raw_text = tk.Text(raw_frame, bg="#020617", fg="#38bdf8", insertbackground="white", relief="flat", font=("Consolas", 10))
+raw_text.pack(fill="both", expand=True)
+
+# REPORT TAB
+report_frame = ttk.Frame(notebook)
+notebook.add(report_frame, text="Reports")
+
+report_notebook = ttk.Notebook(report_frame)
+report_notebook.pack(fill="both", expand=True)
+
+# Tabs
+nmap_tab = ttk.Frame(report_notebook)
+zap_tab = ttk.Frame(report_notebook)
+wapiti_tab = ttk.Frame(report_notebook)
+
+report_notebook.add(nmap_tab, text="Nmap")
+report_notebook.add(zap_tab, text="ZAP")
+report_notebook.add(wapiti_tab, text="Wapiti")
+
+# Text areas
+def create_text(parent):
+    txt = tk.Text(parent, bg="#020617", fg="#e2e8f0", insertbackground="white", relief="flat", font=("Consolas", 10))
+    txt.pack(fill="both", expand=True)
+    return txt
+
+nmap_text = create_text(nmap_tab)
+zap_text = create_text(zap_tab)
+wapiti_text = create_text(wapiti_tab)
 
 on_scanner_change()
+
 root.mainloop()

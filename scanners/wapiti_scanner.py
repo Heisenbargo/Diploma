@@ -1,5 +1,4 @@
 from utils.runner import run_command
-import os
 
 REPORT_FILE = "wapiti_temp.json"
 
