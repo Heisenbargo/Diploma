@@ -195,6 +195,58 @@ def generate_report():
             "----------------------\n"
         )
 
+# ---------------- RECOMMENDATIONS ----------------
+
+def generate_recommendations():
+
+    target = target_entry.get().strip()
+    if not target:
+        return
+
+    target_id = get_or_create_target(target)
+
+    recommend_text.delete(1.0, tk.END)
+
+    # -------- NMAP --------
+    recommend_text.insert(tk.END, "")
+
+    services = get_services(target_id)
+
+    for s in services:
+        service = s["service"]
+
+        if service == "ssh":
+            rec = "Ограничить доступ по IP, отключить root login"
+        elif service == "ftp":
+            rec = "Отключить анонимный доступ"
+        elif service == "telnet":
+            rec = "Отключить Telnet"
+        else:
+            rec = "Проверить необходимость сервиса"
+
+        recommend_text.insert(tk.END, f"{s['port']}: {rec}\n")
+
+    # -------- ZAP --------
+    recommend_text.insert(tk.END, "\n")
+
+    zap_recs = get_zap_recommendations(target_id)
+
+    for r in zap_recs:
+        recommend_text.insert(tk.END,
+            f"{translate_risk(r['risk'])} - {r['alert']}\n"
+            f"{r['solution']}\n\n"
+        )
+
+    # -------- WAPITI --------
+    recommend_text.insert(tk.END, "\n")
+
+    wapiti_recs = get_wapiti_recommendations(target_id)
+
+    for r in wapiti_recs:
+        recommend_text.insert(tk.END,
+            f"{translate_risk(r['severity'])} - {r['issue']}\n"
+            f"{r['solution']}\n\n"
+        )
 
 # ---------------- TRANSLATION ----------------
 
@@ -263,13 +315,13 @@ right_frame = ttk.Frame(main_frame, style="Card.TFrame", padding=10)
 right_frame.pack(side="right", fill="both", expand=True)
 
 # --- LEFT CONTENT ---
-ttk.Label(left_frame, text="Scanner Control", style="Header.TLabel").pack(anchor="w", pady=(0, 15))
+ttk.Label(left_frame, text="Управление сканированием", style="Header.TLabel").pack(anchor="w", pady=(0, 15))
 
 scanner_var = tk.StringVar(value="nmap")
 arg_var = tk.StringVar()
 
 # Scanner select
-ttk.Label(left_frame, text="Scanner").pack(anchor="w")
+ttk.Label(left_frame, text="Сканер").pack(anchor="w")
 scanner_box = ttk.Combobox(
     left_frame,
     textvariable=scanner_var,
@@ -281,7 +333,7 @@ scanner_box.bind("<<ComboboxSelected>>", on_scanner_change)
 scanner_box.pack(fill="x", pady=5)
 
 # Arguments
-ttk.Label(left_frame, text="Arguments").pack(anchor="w", pady=(10, 0))
+ttk.Label(left_frame, text="Аргументы").pack(anchor="w", pady=(10, 0))
 arg_box = ttk.Combobox(
     left_frame,
     textvariable=arg_var
@@ -290,13 +342,14 @@ arg_box.pack(fill="x", pady=5)
 arg_box.bind("<<ComboboxSelected>>", on_argument_change)
 
 # Target
-ttk.Label(left_frame, text="Target").pack(anchor="w", pady=(10, 0))
+ttk.Label(left_frame, text="Цель").pack(anchor="w", pady=(10, 0))
 target_entry = ttk.Entry(left_frame)
 target_entry.pack(fill="x", pady=5)
 
 # Buttons
-ttk.Button(left_frame, text="Run Scan", style="Accent.TButton", command=run_scan).pack(fill="x", pady=(15, 5))
-ttk.Button(left_frame, text="Generate Report", command=generate_report).pack(fill="x")
+ttk.Button(left_frame, text="Запустить сканирование", style="Accent.TButton", command=run_scan).pack(fill="x", pady=(15, 5))
+ttk.Button(left_frame, text="Сгенерировать отчет", command=generate_report).pack(fill="x")
+ttk.Button(left_frame, text="Сформировать рекомендации по устранению", command=generate_recommendations).pack(fill="x", pady=5)
 
 # --- RIGHT CONTENT ---
 notebook = ttk.Notebook(right_frame)
@@ -304,14 +357,14 @@ notebook.pack(fill="both", expand=True)
 
 # RAW TAB
 raw_frame = ttk.Frame(notebook)
-notebook.add(raw_frame, text="Raw Output")
+notebook.add(raw_frame, text="Данные сканера")
 
 raw_text = tk.Text(raw_frame, bg="#020617", fg="#38bdf8", insertbackground="white", relief="flat", font=("Consolas", 10))
 raw_text.pack(fill="both", expand=True)
 
 # REPORT TAB
 report_frame = ttk.Frame(notebook)
-notebook.add(report_frame, text="Reports")
+notebook.add(report_frame, text="Отчеты")
 
 report_notebook = ttk.Notebook(report_frame)
 report_notebook.pack(fill="both", expand=True)
@@ -325,15 +378,21 @@ report_notebook.add(nmap_tab, text="Nmap")
 report_notebook.add(zap_tab, text="ZAP")
 report_notebook.add(wapiti_tab, text="Wapiti")
 
-# Text areas
 def create_text(parent):
-    txt = tk.Text(parent, bg="#020617", fg="#e2e8f0", insertbackground="white", relief="flat", font=("Consolas", 10))
-    txt.pack(fill="both", expand=True)
-    return txt
+    t = tk.Text(parent)
+    t.pack(fill="both", expand=True)
+    return t
 
 nmap_text = create_text(nmap_tab)
 zap_text = create_text(zap_tab)
 wapiti_text = create_text(wapiti_tab)
+
+# RECOMMENDATIONS
+recommend_frame = ttk.Frame(notebook)
+notebook.add(recommend_frame, text="Рекомендации")
+
+recommend_text = tk.Text(recommend_frame)
+recommend_text.pack(fill="both", expand=True)
 
 on_scanner_change()
 

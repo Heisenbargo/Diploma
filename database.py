@@ -93,6 +93,8 @@ def init_db():
         info TEXT,
         level TEXT,
         reference TEXT,
+              
+        solution TEXT,
 
         last_updated DATETIME,
 
@@ -306,6 +308,37 @@ def get_services(target_id):
         }
         for r in rows
     ]
+# --------------------------------------------------
+# RECOMENDATIONS Nmap
+# --------------------------------------------------
+
+def get_nmap_recommendations(target_id):
+
+    services = get_services(target_id)
+
+    recommendations = []
+
+    for s in services:
+
+        port = s["port"]
+        service = s["service"]
+
+        rec = f"Порт {port} ({service}): "
+
+        if service in ["http", "https"]:
+            rec += "Рекомендуется провести анализ веб-приложения (Wapiti/ZAP)"
+        elif service == "ssh":
+            rec += "Ограничить доступ по IP, отключить root login"
+        elif service == "ftp":
+            rec += "Отключить анонимный доступ и использовать SFTP"
+        elif service == "telnet":
+            rec += "Отключить Telnet и использовать SSH"
+        else:
+            rec += "Проверить необходимость открытого порта и ограничить доступ"
+
+        recommendations.append(rec)
+
+    return recommendations
 
 # --------------------------------------------------
 # Wapiti
@@ -320,9 +353,9 @@ def save_wapiti_issues(target_id, issues):
 
         c.execute("""
         INSERT INTO wapiti_issues
-        (target_id, type, url, parameter, method, info, level, reference, last_updated)
+        (target_id, type, url, parameter, method, info, level, reference, solution, last_updated)
 
-        VALUES(?,?,?,?,?,?,?, ?, datetime('now'))
+        VALUES(?,?,?,?,?,?,?,?,?, datetime('now'))
 
         ON CONFLICT(target_id, url, parameter, type)
 
@@ -331,6 +364,7 @@ def save_wapiti_issues(target_id, issues):
             info=excluded.info,
             level=excluded.level,
             reference=excluded.reference,
+            solution=excluded.solution,
             last_updated=datetime('now')
         """, (
 
@@ -341,7 +375,8 @@ def save_wapiti_issues(target_id, issues):
             i.get("method"),
             i.get("info"),
             i.get("level"),
-            i.get("reference")
+            i.get("reference"),
+            i.get("solution")
 
         ))
 
@@ -360,6 +395,34 @@ def get_wapiti_issues(target_id):
 
     return [
         {"url": r[0], "type": r[1], "info": r[2], "level": r[3]}
+        for r in rows
+    ]
+
+# --------------------------------------------------
+# RECOMENDATIONS Wapiti
+# --------------------------------------------------
+
+def get_wapiti_recommendations(target_id):
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT solution
+        FROM wapiti_issues
+        WHERE target_id=? AND solution IS NOT NULL
+    """, (target_id,))
+
+    rows = c.fetchall()
+    conn.close()
+
+    return [
+        {
+            "url": r[0],
+            "issue": r[1],
+            "solution": r[2],
+            "severity": r[3]
+        }
         for r in rows
     ]
 
@@ -431,6 +494,34 @@ def get_vulnerabilities(target_id):
             "url": r[0],
             "alert": r[1],
             "description": r[2],
+            "risk": r[3]
+        }
+        for r in rows
+    ]
+
+# --------------------------------------------------
+# RECOMENDATIONS ZAP
+# --------------------------------------------------
+
+def get_zap_recommendations(target_id):
+
+    conn = get_conn()
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT url, alert, solution, risk
+        FROM vulnerabilities
+        WHERE target_id=? AND solution IS NOT NULL
+    """, (target_id,))
+
+    rows = c.fetchall()
+    conn.close()
+
+    return [
+        {
+            "url": r[0],
+            "alert": r[1],
+            "solution": r[2],
             "risk": r[3]
         }
         for r in rows

@@ -23,7 +23,8 @@ def parse(report_file):
                 "parameter": v.get("parameter"),
                 "info": v.get("info"),
                 "level": v.get("level"),
-                "reference": v.get("reference")
+                "reference": v.get("reference"),
+                "solution": v.get("solution")
             })
 
     os.remove(report_file)
